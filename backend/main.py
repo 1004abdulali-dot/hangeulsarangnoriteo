@@ -7,6 +7,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 DB_PATH = "/workspace/data/app.db"
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1xuTIe_UQ6cbaqhOdtfoOclqeupftUtkCgpigFt2zb3A/export?format=csv&gid=0"
@@ -31,6 +32,13 @@ def init_db():
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )''')
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 init_db()
 class ProfilePayload(BaseModel):
     login_id: str
