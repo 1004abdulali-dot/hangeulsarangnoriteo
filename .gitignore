@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.vite/
+.npm/
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log

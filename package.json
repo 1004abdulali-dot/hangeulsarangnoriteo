@@ -1,0 +1,1 @@
+{"name":"app","private":true,"type":"module","scripts":{"dev":"vite","build":"vite build"},"dependencies":{"react":"^18.3.1","react-dom":"^18.3.1"},"devDependencies":{"@vitejs/plugin-react":"^4.3.0","vite":"^5.4.0","typescript":"^5.6.0","@types/react":"^18.3.0","@types/react-dom":"^18.3.0"}}
