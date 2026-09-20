@@ -200,9 +200,42 @@ def teacher_login(payload: TeacherLoginPayload):
     return {'ok': True}
 @app.get('/api/teacher/students')
 def teacher_students():
-    with get_db() as conn:
-        rows = conn.execute('SELECT login_id, points, level, title, records, updated_at FROM account_profiles ORDER BY points DESC, login_id ASC').fetchall()
-        return [dict(row) for row in rows]
+    # 1. 임시 메모리(SQLite)를 무시하고, 구글 시트에서 전체 학생 명단을 100% 직접 가져옵니다. (명단 누락 완벽 해결)
+    data = script_json()
+    sheet_students = data.get('students', [])
+    
+    # 2. 선생님이 data.ts에 만드신 6단계 칭호와 커트라인을 백엔드에도 동일하게 적용!
+    def get_status(points):
+        if points >= 40000: return 6, "우리말 별빛 대장"
+        if points >= 25000: return 5, "한글 마을 수호자"
+        if points >= 15000: return 4, "세종대왕의 오른팔"
+        if points >= 8000:  return 3, "우리말 지킴이"
+        if points >= 3000:  return 2, "초보 훈민정음"
+        return 1, "한글 새싹"
+
+    result = []
+    for s in sheet_students:
+        pts = int(s.get('totalPoints', 0) or 0)
+        level, title = get_status(pts)
+        
+        # 각 게임별 최고 점수 포장
+        records_dict = {
+            "rain": {"bestScore": int(s.get('game1Best', 0) or 0)},
+            "spy": {"bestScore": int(s.get('game2Best', 0) or 0)},
+            "sort": {"bestScore": int(s.get('game3Best', 0) or 0)}
+        }
+        
+        result.append({
+            "login_id": s.get("id", ""),
+            "points": pts,
+            "level": level,
+            "title": title,
+            "records": json.dumps(records_dict)
+        })
+        
+    # 누적 포인트가 가장 높은 학생부터 내림차순(1등->꼴찌)으로 정렬
+    result.sort(key=lambda x: x['points'], reverse=True)
+    return result
 @app.get('/api/words/{game_id}')
 def get_words(game_id: str):
     if game_id not in GAME_TYPES:
