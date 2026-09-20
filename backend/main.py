@@ -65,13 +65,22 @@ def load_sheet_accounts():
             content = response.read().decode('utf-8-sig')
     except (URLError, TimeoutError, OSError):
         raise HTTPException(status_code=503, detail='로그인 명단을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.')
-    accounts = []
-    for row in csv.DictReader(StringIO(content)):
-        login_id = (row.get('아이디') or '').strip()
-        password = (row.get('비밀번호') or '').strip()
-        if login_id and password:
-            accounts.append((login_id, password))
+    
+    accounts = {}
+    # ✅ DictReader 대신 reader를 사용하여 G열(인덱스 6)의 학교 정보를 즉시 확보합니다!
+    reader = csv.reader(StringIO(content))
+    headers = next(reader, [])
+    for row in reader:
+        if len(row) >= 2:
+            login_id = row[0].strip()
+            password = row[1].strip()
+            # G열(7번째 칸) 데이터 확보
+            school = row[6].strip() if len(row) > 6 else ''
+            
+            if login_id and password:
+                accounts[login_id] = {'password': password, 'school': school}
     return accounts
+
 def get_account_profile(conn, login_id):
     conn.execute('INSERT OR IGNORE INTO account_profiles (login_id) VALUES (?)', (login_id,))
     return conn.execute('''SELECT login_id, student_name, points, level, title, records, updated_at
@@ -135,16 +144,24 @@ def login(payload: LoginPayload):
     password = payload.password.strip()
     if not login_id or not password:
         raise HTTPException(status_code=400, detail='아이디와 비밀번호를 입력해 주세요.')
-    if (login_id, password) not in load_sheet_accounts():
+    
+    accounts = load_sheet_accounts()
+    if login_id not in accounts or accounts[login_id]['password'] != password:
         raise HTTPException(status_code=401, detail='시트에 등록된 아이디 또는 비밀번호가 맞지 않아요.')
+    
+    # 🚀 핵심: 여기서 초고속으로 읽어온 학교 정보를 프로필에 즉시 끼워 넣습니다!
+    school = accounts[login_id]['school']
     with get_db() as conn:
-        return dict(get_account_profile(conn, login_id))
+        profile = dict(get_account_profile(conn, login_id))
+        profile['school'] = school 
+        return profile
 @app.get('/api/rankings')
 def rankings():
     data = script_json(query={'action': 'getUser', 'id': 'ranking-check'})
     source = data.get('user', data) if isinstance(data, dict) else {}
     raw_rankings = data.get('rankings', source.get('rankings', {})) if isinstance(data, dict) and isinstance(source, dict) else {}
     return {'rankings': raw_rankings if isinstance(raw_rankings, dict) else {}}
+
 @app.get('/api/profile/{login_id}')
 def load_profile(login_id: str):
     student_id = login_id.strip()
@@ -155,7 +172,7 @@ def load_profile(login_id: str):
     if not isinstance(source, dict):
         raise HTTPException(status_code=502, detail='시트에서 학생 기록을 올바르게 받지 못했어요.')
     
-    school = source.get('school', '') # ✅ 학교 정보 추가
+    school = source.get('school', '') 
     
     def score_value(*names):
         for name in names:
@@ -172,15 +189,19 @@ def load_profile(login_id: str):
     }
     rankings = data.get('rankings', source.get('rankings', {})) if isinstance(data, dict) else {}
     rankings = rankings if isinstance(rankings, dict) else {}
-    # 반환 값에 school 추가
     return {'login_id': student_id, 'school': school, 'points': points, 'records': records, 'rankings': rankings}
+
 @app.put('/api/profile')
 def save_profile(payload: ProfilePayload):
     login_id, password = payload.login_id.strip(), payload.password.strip()
     if not login_id or not password:
         raise HTTPException(status_code=400, detail='계정 정보를 확인할 수 없어요.')
-    if (login_id, password) not in load_sheet_accounts():
+    
+    # ✅ 수정된 검사 로직에 맞게 업데이트
+    accounts = load_sheet_accounts()
+    if login_id not in accounts or accounts[login_id]['password'] != password:
         raise HTTPException(status_code=401, detail='로그인 정보를 다시 확인해 주세요.')
+    
     try:
         records = json.loads(payload.records or '{}')
     except json.JSONDecodeError:
