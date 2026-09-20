@@ -46,7 +46,7 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false)
   const [rankings, setRankings] = useState<Rankings>(emptyRankings)
 
-  const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
+ const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
     const studentId = typeof loginId === 'string' ? loginId.trim() : ''
     if (!studentId) return
     setProfileLoading(true)
@@ -54,6 +54,7 @@ export default function App() {
       const response = await api(`profile/${encodeURIComponent(studentId)}`)
       const data = await response.json()
       if (!response.ok) throw new Error(data.detail || '점수를 불러오지 못했어요.')
+      
       const points = Number.isFinite(Number(data.points)) ? Math.max(0, Number(data.points)) : 0
       const sheetRecords = data.records && typeof data.records === 'object' ? data.records as Partial<Records> : {}
       const records: Records = {
@@ -61,8 +62,15 @@ export default function App() {
         spy: { bestScore: Math.max(0, Number(sheetRecords.spy?.bestScore) || 0), bestCombo: fallback.records.spy.bestCombo },
         sort: { bestScore: Math.max(0, Number(sheetRecords.sort?.bestScore) || 0), bestCombo: fallback.records.sort.bestCombo },
       }
+      
       const current = status(points)
-      const syncedProfile = { nickname: studentId, points, level: current.level, title: current.title, records }
+      
+      // ✅ 시트에서 가져온 학교 이름이 있으면 "학교명 + 이름"으로 합쳐줍니다!
+      const schoolName = data.school ? String(data.school).trim() : ''
+      const displayNickname = schoolName ? `${schoolName} ${studentId}` : studentId
+
+      const syncedProfile = { nickname: displayNickname, points, level: current.level, title: current.title, records }
+      
       setRankings(normalizeRankings(data.rankings))
       try { window.localStorage.setItem(`hangul-profile-${studentId}`, JSON.stringify(syncedProfile)) } catch (storageError) { console.error('[점수 불러오기] 기기 기록 갱신 오류:', storageError) }
       setProfile(syncedProfile)

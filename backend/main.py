@@ -154,6 +154,9 @@ def load_profile(login_id: str):
     source = data.get('user', data) if isinstance(data, dict) else {}
     if not isinstance(source, dict):
         raise HTTPException(status_code=502, detail='시트에서 학생 기록을 올바르게 받지 못했어요.')
+    
+    school = source.get('school', '') # ✅ 학교 정보 추가
+    
     def score_value(*names):
         for name in names:
             try:
@@ -169,7 +172,8 @@ def load_profile(login_id: str):
     }
     rankings = data.get('rankings', source.get('rankings', {})) if isinstance(data, dict) else {}
     rankings = rankings if isinstance(rankings, dict) else {}
-    return {'login_id': student_id, 'points': points, 'records': records, 'rankings': rankings}
+    # 반환 값에 school 추가
+    return {'login_id': student_id, 'school': school, 'points': points, 'records': records, 'rankings': rankings}
 @app.put('/api/profile')
 def save_profile(payload: ProfilePayload):
     login_id, password = payload.login_id.strip(), payload.password.strip()
@@ -200,11 +204,9 @@ def teacher_login(payload: TeacherLoginPayload):
     return {'ok': True}
 @app.get('/api/teacher/students')
 def teacher_students():
-    # 1. 임시 메모리(SQLite)를 무시하고, 구글 시트에서 전체 학생 명단을 100% 직접 가져옵니다. (명단 누락 완벽 해결)
     data = script_json()
     sheet_students = data.get('students', [])
     
-    # 2. 선생님이 data.ts에 만드신 6단계 칭호와 커트라인을 백엔드에도 동일하게 적용!
     def get_status(points):
         if points >= 40000: return 6, "우리말 별빛 대장"
         if points >= 25000: return 5, "한글 마을 수호자"
@@ -217,8 +219,8 @@ def teacher_students():
     for s in sheet_students:
         pts = int(s.get('totalPoints', 0) or 0)
         level, title = get_status(pts)
+        school = s.get('school', '') # ✅ 학교 정보 추가
         
-        # 각 게임별 최고 점수 포장
         records_dict = {
             "rain": {"bestScore": int(s.get('game1Best', 0) or 0)},
             "spy": {"bestScore": int(s.get('game2Best', 0) or 0)},
@@ -227,13 +229,13 @@ def teacher_students():
         
         result.append({
             "login_id": s.get("id", ""),
+            "school": school, # ✅ 학교 정보 추가
             "points": pts,
             "level": level,
             "title": title,
             "records": json.dumps(records_dict)
         })
         
-    # 누적 포인트가 가장 높은 학생부터 내림차순(1등->꼴찌)으로 정렬
     result.sort(key=lambda x: x['points'], reverse=True)
     return result
 @app.get('/api/words/{game_id}')
