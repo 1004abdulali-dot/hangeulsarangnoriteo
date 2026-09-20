@@ -85,17 +85,25 @@ export default function App() {
     const response = await api('login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: loginId, password }) })
     const data = await response.json()
     if (!response.ok) throw new Error(data.detail || '입장하지 못했어요.')
+    
     const user = data.user && typeof data.user === 'object' ? data.user : data
     let baseProfile: Profile
+    
+    // 🚀 로그인 즉시 백엔드에서 날아온 학교 정보를 내 이름표에 찰싹 붙여줍니다!
+    const schoolName = user.school ? String(user.school).trim() : ''
+    const currentId = user.login_id || user.id || loginId
+    const displayNickname = schoolName ? `${schoolName} ${currentId}` : currentId
+
     try {
       const records = { ...initialRecords, ...JSON.parse(user.records || '{}') }
-      baseProfile = { nickname: user.login_id || user.id || loginId, points: user.points || user.totalPoints || 0, level: user.level || 1, title: user.title || '한글 새싹', records }
+      baseProfile = { nickname: displayNickname, points: user.points || user.totalPoints || 0, level: user.level || 1, title: user.title || '한글 새싹', records }
     } catch {
-      baseProfile = { nickname: user.login_id || user.id || loginId, points: user.points || user.totalPoints || 0, level: user.level || 1, title: user.title || '한글 새싹', records: initialRecords }
+      baseProfile = { nickname: displayNickname, points: user.points || user.totalPoints || 0, level: user.level || 1, title: user.title || '한글 새싹', records: initialRecords }
     }
+    
     setProfile(baseProfile)
     setRankings(normalizeRankings(data.rankings || user.rankings))
-    const currentId = user.login_id || user.id || loginId
+    
     setAccountId(currentId); setAccountPassword(password); setStudentName(currentId); setLoggedIn(true)
     await updateProfileFromSheet(currentId, baseProfile)
   }
