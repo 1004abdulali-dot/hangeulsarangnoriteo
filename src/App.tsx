@@ -8,10 +8,12 @@ import { SpyGame } from './components/SpyGame'
 import { SortGame } from './components/SortGame'
 import { LoginScreen } from './components/LoginScreen'
 import { TeacherDashboard } from './components/TeacherDashboard'
+
 const emptyProfile: Profile = { nickname: '한글 친구', points: 0, level: 1, title: '한글 새싹', records: initialRecords }
 type RankingEntry = { id: string; name: string; score: number }
 type Rankings = Record<GameId, RankingEntry[]>
 const emptyRankings: Rankings = { rain: [], spy: [], sort: [] }
+
 function normalizeRankings(value: unknown): Rankings {
   const source = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return (Object.keys(emptyRankings) as GameId[]).reduce((all, game) => {
@@ -28,6 +30,7 @@ function normalizeRankings(value: unknown): Rankings {
     return all
   }, { ...emptyRankings })
 }
+
 export default function App() {
   const [profile, setProfile] = useState<Profile>(emptyProfile)
   const [accountId, setAccountId] = useState('')
@@ -42,6 +45,7 @@ export default function App() {
   const [celebrate, setCelebrate] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [rankings, setRankings] = useState<Rankings>(emptyRankings)
+
   const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
     const studentId = typeof loginId === 'string' ? loginId.trim() : ''
     if (!studentId) return
@@ -68,6 +72,7 @@ export default function App() {
       setProfileLoading(false)
     }
   }, [])
+
   const login = async (loginId: string, password: string) => {
     const response = await api('login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: loginId, password }) })
     const data = await response.json()
@@ -86,12 +91,27 @@ export default function App() {
     setAccountId(currentId); setAccountPassword(password); setStudentName(currentId); setLoggedIn(true)
     await updateProfileFromSheet(currentId, baseProfile)
   }
+
   const loginTeacher = async (password: string) => {
     const response = await api('teacher/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) })
     const data = await response.json()
     if (!response.ok) throw new Error(data.detail || '분석실에 들어가지 못했어요.')
     setTeacherLoggedIn(true)
   }
+
+  // ✅ 로그아웃 함수 추가: 모든 정보(상태)를 초기화하고 로그인 화면으로 돌아갑니다.
+  const logout = () => {
+    if (window.confirm('정말 로그아웃 할까요?')) {
+      setProfile(emptyProfile)
+      setAccountId('')
+      setAccountPassword('')
+      setStudentName('')
+      setScreen('main')
+      setGameWords([])
+      setLoggedIn(false)
+    }
+  }
+
   const startGame = async (game: GameId) => {
     setLoadingGame(true)
     setLoadError('')
@@ -111,12 +131,10 @@ export default function App() {
         console.error('[단어 불러오기] JSON 파싱 오류:', parseError)
         throw new Error('받아 온 문제 자료를 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.')
       }
-      console.log('[단어 불러오기] 받아 온 자료:', wordData)
       if (!response.ok) {
         const detail = typeof wordData === 'object' && wordData !== null && 'detail' in wordData
           ? String(wordData.detail)
           : '문제를 불러오지 못했어요.'
-        console.error('[단어 불러오기] 서버 응답 오류:', response.status, wordData)
         throw new Error(detail)
       }
       const gameKey: Record<GameId, string> = { rain: 'game1', spy: 'game2', sort: 'game3' }
@@ -143,16 +161,15 @@ export default function App() {
       const shuffledWords = shuffleUniqueWords(words)
       if (!shuffledWords.length) throw new Error('선생님이 등록한 문제가 아직 없어요.')
       setGameWords(shuffledWords)
-      // 문제 상태가 먼저 반영된 뒤 게임 화면으로 이동해 빈 화면 전환을 막습니다.
       await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
       setScreen(game)
     } catch (error) {
-      console.error('[단어 불러오기] 시작 실패:', error)
       setLoadError(error instanceof Error ? error.message : '문제를 불러오지 못했어요.')
     } finally {
       setLoadingGame(false)
     }
   }
+
   const saveResult = (game: GameId, score: number, combo: number) => {
     const currentId = typeof accountId === 'string' ? accountId.trim() : ''
     const old = profile.records[game]
@@ -179,17 +196,87 @@ export default function App() {
     })
     return { ...result, saveStatus: 'saving' as const, saveTask }
   }
+
   const returnHome = () => {
     setScreen('main')
     if (accountId.trim()) void updateProfileFromSheet(accountId, profile)
   }
+
   if (teacherLoggedIn) return <TeacherDashboard onExit={() => setTeacherLoggedIn(false)} />
   if (!loggedIn) return <LoginScreen onLogin={login} onTeacherLogin={loginTeacher} />
   if (loadingGame) return <main className="game-loading" role="status"><span>🌸</span><h1>선생님이 내신 문제를<br />불러오는 중...</h1><p>최신 학습 단어를 준비하고 있어요.</p></main>
+  
   const s = status(profile.points)
   if (screen === 'rain' && gameWords.length) return <RainGame words={gameWords} onHome={returnHome} onEnd={(score, combo) => saveResult('rain', score, combo)} />
   if (screen === 'spy' && gameWords.length) return <SpyGame words={gameWords} onHome={returnHome} onEnd={(score, combo) => saveResult('spy', score, combo)} />
   if (screen === 'sort' && gameWords.length) return <SortGame words={gameWords} onHome={returnHome} onEnd={(score, combo) => saveResult('sort', score, combo)} />
+  
   const medals = ['🥇', '🥈', '🥉']
-  return <main className="app-shell"><div className="decor cloud">☁️</div><div className="decor flower">🌸</div>{celebrate && <div className="level-up">✨ 단계 올랐어요! ✨<strong>{profile.title}</strong><span>꽃가루가 팡팡! 축하해요</span></div>}<header className="hero"><p>🌸 봄날 한글 마을에 온 걸 환영해요!</p><h1>한글사랑 놀이터2</h1><p>재미있는 놀이로 우리말을 더 사랑해요</p></header><section className="profile-card" aria-label="내 정보" aria-busy={profileLoading}><div className="avatar">🏡</div><div className="profile-copy"><p className="profile-name"><span>내 이름</span><strong>{profile.nickname || studentName || accountId}</strong></p>{profileLoading ? <p className="profile-loading" role="status">점수 불러오는 중...</p> : <><h2>단계 {profile.level} · {profile.title}</h2><div className="progress"><i style={{ width: `${s.progress}%` }} /></div><small>다음 단계까지 {Math.max(0, s.next - profile.points)}점</small></>}</div><div className="points">{profileLoading ? <><b>…</b><span>점수 불러오는 중</span></> : <><b>{profile.points}</b><span>모은 점수</span></>}</div></section>{loadError && <p className="game-load-error" role="alert">{loadError}</p>}<section className="game-grid" aria-label="게임 선택">{(Object.keys(gameMeta) as GameId[]).map(id => <button className={'game-card ' + id} key={id} onClick={() => void startGame(id)}><span className="game-icon">{gameMeta[id].icon}</span><h2>{gameMeta[id].title}</h2><p>{gameMeta[id].description}</p><footer>최고 점수 <b>{profile.records[id].bestScore}</b> · 가장 많이 연속으로 맞힌 횟수 <b>{profile.records[id].bestCombo}</b></footer><div className="hall-of-fame" aria-label={`${gameMeta[id].title} 명예의 전당`}><h3>🏆 명예의 전당 (상위 세 명)</h3>{rankings[id].length ? <ol className="ranking-list">{rankings[id].map((entry, index) => <li key={`${entry.id}-${index}`}><span className="ranking-medal">{medals[index]}</span><span className="ranking-id">{entry.name}</span><span className="ranking-score">{entry.score}점</span></li>)}</ol> : <p className="ranking-empty">아직 기록이 없습니다</p>}</div></button>)}</section></main>
+  
+  return (
+    <main className="app-shell">
+      <div className="decor cloud">☁️</div>
+      <div className="decor flower">🌸</div>
+      {celebrate && <div className="level-up">✨ 단계 올랐어요! ✨<strong>{profile.title}</strong><span>꽃가루가 팡팡! 축하해요</span></div>}
+      
+      <header className="hero">
+        <p>🌸 봄날 한글 마을에 온 걸 환영해요!</p>
+        <h1>한글사랑 놀이터2</h1>
+        <p>재미있는 놀이로 우리말을 더 사랑해요</p>
+      </header>
+      
+      <section className="profile-card" aria-label="내 정보" aria-busy={profileLoading}>
+        {/* ✅ 로그아웃 버튼을 프로필 카드 우측 상단에 배치 */}
+        <button 
+          onClick={logout} 
+          style={{ position: 'absolute', top: '15px', right: '15px', padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#f1f3f5', color: '#495057', border: '1px solid #ced4da', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f1f3f5'}
+        >
+          로그아웃 👋
+        </button>
+        
+        <div className="avatar">🏡</div>
+        <div className="profile-copy">
+          <p className="profile-name">
+            <span>내 이름</span>
+            <strong>{profile.nickname || studentName || accountId}</strong>
+          </p>
+          {profileLoading ? <p className="profile-loading" role="status">점수 불러오는 중...</p> : <>
+            <h2>단계 {profile.level} · {profile.title}</h2>
+            <div className="progress"><i style={{ width: `${s.progress}%` }} /></div>
+            <small>다음 단계까지 {Math.max(0, s.next - profile.points)}점</small>
+          </>}
+        </div>
+        <div className="points">
+          {profileLoading ? <><b>…</b><span>점수 불러오는 중</span></> : <><b>{profile.points}</b><span>모은 점수</span></>}
+        </div>
+      </section>
+      
+      {loadError && <p className="game-load-error" role="alert">{loadError}</p>}
+      
+      <section className="game-grid" aria-label="게임 선택">
+        {(Object.keys(gameMeta) as GameId[]).map(id => 
+          <button className={'game-card ' + id} key={id} onClick={() => void startGame(id)}>
+            <span className="game-icon">{gameMeta[id].icon}</span>
+            <h2>{gameMeta[id].title}</h2>
+            <p>{gameMeta[id].description}</p>
+            <footer>최고 점수 <b>{profile.records[id].bestScore}</b> · 가장 많이 연속으로 맞힌 횟수 <b>{profile.records[id].bestCombo}</b></footer>
+            <div className="hall-of-fame" aria-label={`${gameMeta[id].title} 명예의 전당`}>
+              <h3>🏆 명예의 전당 (상위 세 명)</h3>
+              {rankings[id].length ? <ol className="ranking-list">
+                {rankings[id].map((entry, index) => 
+                  <li key={`${entry.id}-${index}`}>
+                    <span className="ranking-medal">{medals[index]}</span>
+                    <span className="ranking-id">{entry.name}</span>
+                    <span className="ranking-score">{entry.score}점</span>
+                  </li>
+                )}
+              </ol> : <p className="ranking-empty">아직 기록이 없습니다</p>}
+            </div>
+          </button>
+        )}
+      </section>
+    </main>
+  )
 }
