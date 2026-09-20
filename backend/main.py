@@ -220,3 +220,42 @@ def create_word(payload: WordPayload):
     extra = (payload.tip if game_id == 'sort' else payload.kind).strip()
     script_json('POST', {'gameType': GAME_TYPES[game_id], 'word': word[:30], 'meaning': meaning[:120], 'extra': extra[:80]})
     return {'ok': True}
+@app.put('/api/teacher/words/{word_id}')
+def update_word(word_id: str, payload: WordPayload):
+    try:
+        # word_id 형식: "rain-0-나래" -> game_id, index, original_word로 분리
+        game_id, row_index, original_word = word_id.split('-', 2)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='잘못된 단어 ID입니다.')
+
+    word, meaning = payload.word.strip(), payload.meaning.strip()
+    extra = (payload.tip if game_id == 'sort' else payload.kind).strip()
+
+    # 앱스 스크립트에 '수정(editWord)' 액션 전달
+    script_json('POST', {
+        'action': 'editWord',
+        'gameType': GAME_TYPES.get(game_id, '1'),
+        'originalWord': original_word,
+        'newWord': word[:30],
+        'meaning': meaning[:120],
+        'extra': extra[:80]
+    })
+    return {'ok': True}
+
+@app.delete('/api/teacher/words/{word_id}')
+def delete_word(word_id: str):
+    try:
+        game_id, row_index, original_word = word_id.split('-', 2)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='잘못된 단어 ID입니다.')
+
+    if game_id not in GAME_TYPES:
+        raise HTTPException(status_code=404, detail='게임을 찾을 수 없어요.')
+
+    # 앱스 스크립트에 '삭제(deleteWord)' 액션 전달
+    script_json('POST', {
+        'action': 'deleteWord',
+        'gameType': GAME_TYPES[game_id],
+        'word': original_word
+    })
+    return {'ok': True}
