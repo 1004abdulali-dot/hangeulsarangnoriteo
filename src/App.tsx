@@ -45,6 +45,9 @@ export default function App() {
   const [celebrate, setCelebrate] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [rankings, setRankings] = useState<Rankings>(emptyRankings)
+  
+  // 🚀 지난주 랭킹을 담을 새로운 상태 추가
+  const [lastWeekRankings, setLastWeekRankings] = useState<Rankings>(emptyRankings)
 
   const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
     const studentId = typeof loginId === 'string' ? loginId.trim() : ''
@@ -64,13 +67,15 @@ export default function App() {
       }
       
       const current = status(points)
-      
       const schoolName = data.school ? String(data.school).trim() : ''
       const displayNickname = schoolName ? `${schoolName} ${studentId}` : studentId
 
       const syncedProfile = { nickname: displayNickname, points, level: current.level, title: current.title, records }
       
       setRankings(normalizeRankings(data.rankings))
+      // 🚀 백엔드에서 받은 지난주 랭킹 화면에 세팅
+      setLastWeekRankings(normalizeRankings(data.lastWeekRankings))
+      
       try { window.localStorage.setItem(`hangul-profile-${studentId}`, JSON.stringify(syncedProfile)) } catch (storageError) { console.error('[점수 불러오기] 기기 기록 갱신 오류:', storageError) }
       setProfile(syncedProfile)
     } catch (error) {
@@ -101,6 +106,8 @@ export default function App() {
     
     setProfile(baseProfile)
     setRankings(normalizeRankings(data.rankings || user.rankings))
+    // 🚀 로그인할 때 지난주 랭킹도 같이 불러오기
+    setLastWeekRankings(normalizeRankings(data.lastWeekRankings || user.lastWeekRankings))
     
     setAccountId(currentId); setAccountPassword(password); setStudentName(currentId); setLoggedIn(true)
     await updateProfileFromSheet(currentId, baseProfile)
@@ -115,51 +122,23 @@ export default function App() {
 
   const logout = () => {
     if (window.confirm('정말 로그아웃 할까요?')) {
-      setProfile(emptyProfile)
-      setAccountId('')
-      setAccountPassword('')
-      setStudentName('')
-      setScreen('main')
-      setGameWords([])
-      setLoggedIn(false)
+      setProfile(emptyProfile); setAccountId(''); setAccountPassword(''); setStudentName('')
+      setScreen('main'); setGameWords([]); setLoggedIn(false)
     }
   }
 
   const startGame = async (game: GameId) => {
-    setLoadingGame(true)
-    setLoadError('')
+    setLoadingGame(true); setLoadError('')
     try {
       let response: Response
-      try {
-        response = await api(`words/${game}`)
-      } catch (networkError) {
-        console.error('[단어 불러오기] 네트워크 오류:', networkError)
-        throw new Error('문제 서버와 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.')
-      }
+      try { response = await api(`words/${game}`) } catch (networkError) { throw new Error('문제 서버와 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.') }
       let wordData: unknown
-      try {
-        const raw = await response.text()
-        wordData = raw ? JSON.parse(raw) : []
-      } catch (parseError) {
-        console.error('[단어 불러오기] JSON 파싱 오류:', parseError)
-        throw new Error('받아 온 문제 자료를 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.')
-      }
-      if (!response.ok) {
-        const detail = typeof wordData === 'object' && wordData !== null && 'detail' in wordData
-          ? String(wordData.detail)
-          : '문제를 불러오지 못했어요.'
-        throw new Error(detail)
-      }
+      try { const raw = await response.text(); wordData = raw ? JSON.parse(raw) : [] } catch (parseError) { throw new Error('받아 온 문제 자료를 읽지 못했어요. 잠시 뒤 다시 시도해 주세요.') }
+      if (!response.ok) throw new Error(typeof wordData === 'object' && wordData !== null && 'detail' in wordData ? String(wordData.detail) : '문제를 불러오지 못했어요.')
       const gameKey: Record<GameId, string> = { rain: 'game1', spy: 'game2', sort: 'game3' }
-      const source = Array.isArray(wordData)
-        ? wordData
-        : typeof wordData === 'object' && wordData !== null && Array.isArray((wordData as Record<string, unknown>)[gameKey[game]])
-          ? (wordData as Record<string, unknown>)[gameKey[game]] as unknown[]
-          : []
+      const source = Array.isArray(wordData) ? wordData : typeof wordData === 'object' && wordData !== null && Array.isArray((wordData as Record<string, unknown>)[gameKey[game]]) ? (wordData as Record<string, unknown>)[gameKey[game]] as unknown[] : []
       const words = source.flatMap((item, index): GameWord[] => {
-        if (typeof item === 'string' && item.trim()) {
-          return [{ id: `${game}-${index}-${item}`, game_id: game, word: item.trim(), meaning: item.trim(), extra: '' }]
-        }
+        if (typeof item === 'string' && item.trim()) return [{ id: `${game}-${index}-${item}`, game_id: game, word: item.trim(), meaning: item.trim(), extra: '' }]
         if (typeof item !== 'object' || item === null) return []
         const row = item as Record<string, unknown>
         const word = typeof row.word === 'string' ? row.word.trim() : typeof row.text === 'string' ? row.text.trim() : typeof row['단어'] === 'string' ? row['단어'].trim() : ''
@@ -176,11 +155,7 @@ export default function App() {
       setGameWords(shuffledWords)
       await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()))
       setScreen(game)
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : '문제를 불러오지 못했어요.')
-    } finally {
-      setLoadingGame(false)
-    }
+    } catch (error) { setLoadError(error instanceof Error ? error.message : '문제를 불러오지 못했어요.') } finally { setLoadingGame(false) }
   }
 
   const saveResult = (game: GameId, score: number, combo: number) => {
@@ -192,28 +167,17 @@ export default function App() {
     setProfile(next)
     if (now.level > before.level) { setCelebrate(true); window.setTimeout(() => setCelebrate(false), 2600) }
     const result = { best: score > old.bestScore, next: now.next - newPoints, progress: now.progress }
-    if (!currentId) {
-      window.alert('로그인이 필요합니다')
-      return { ...result, saveStatus: 'failed' as const }
-    }
+    if (!currentId) { window.alert('로그인이 필요합니다'); return { ...result, saveStatus: 'failed' as const } }
     const saveTask = api('profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login_id: currentId, password: accountPassword, student_name: studentName, ...next, records: JSON.stringify(records) }),
     }).then(response => {
-      if (!response.ok) throw new Error('기록을 저장하지 못했어요.')
-      return 'saved' as const
-    }).catch(error => {
-      console.error('[기록 저장] 오류:', error)
-      return 'failed' as const
-    })
+      if (!response.ok) throw new Error('기록을 저장하지 못했어요.'); return 'saved' as const
+    }).catch(error => { console.error('[기록 저장] 오류:', error); return 'failed' as const })
     return { ...result, saveStatus: 'saving' as const, saveTask }
   }
 
-  const returnHome = () => {
-    setScreen('main')
-    if (accountId.trim()) void updateProfileFromSheet(accountId, profile)
-  }
+  const returnHome = () => { setScreen('main'); if (accountId.trim()) void updateProfileFromSheet(accountId, profile) }
 
   if (teacherLoggedIn) return <TeacherDashboard onExit={() => setTeacherLoggedIn(false)} />
   if (!loggedIn) return <LoginScreen onLogin={login} onTeacherLogin={loginTeacher} />
@@ -238,71 +202,99 @@ export default function App() {
         <p>재미있는 놀이로 우리말을 더 사랑해요</p>
       </header>
       
-      <section className="profile-card" aria-label="내 정보" aria-busy={profileLoading}>
+      {/* 🚀 화면을 왼쪽(기존)과 오른쪽(지난주 랭킹)으로 나누어주는 레이아웃 컨테이너 */}
+      <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap', justifyContent: 'center' }}>
         
-        {/* ✅ 새로고침 버튼과 로그아웃 버튼을 한데 묶어서 우측 상단에 예쁘게 배치! */}
-        <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px' }}>
-          <button 
-            onClick={() => updateProfileFromSheet(accountId, profile)} 
-            disabled={profileLoading}
-            style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#e6fcf5', color: '#0ca678', border: '1px solid #63e6be', borderRadius: '20px', cursor: profileLoading ? 'wait' : 'pointer', transition: 'all 0.2s' }}
-            onMouseOver={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#c3fae8')}
-            onMouseOut={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#e6fcf5')}
-          >
-            {profileLoading ? '가져오는 중...' : '새로고침 🔄'}
-          </button>
+        {/* === [왼쪽 영역: 내 프로필과 게임 선택] === */}
+        <div style={{ flex: '1 1 650px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
-          <button 
-            onClick={logout} 
-            style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#f1f3f5', color: '#495057', border: '1px solid #ced4da', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f1f3f5'}
-          >
-            로그아웃 👋
-          </button>
-        </div>
-        
-        <div className="avatar">🏡</div>
-        <div className="profile-copy">
-          <p className="profile-name">
-            <span>내 이름</span>
-            <strong>{profile.nickname || studentName || accountId}</strong>
-          </p>
-          {profileLoading ? <p className="profile-loading" role="status">점수 불러오는 중...</p> : <>
-            <h2>단계 {profile.level} · {profile.title}</h2>
-            <div className="progress"><i style={{ width: `${s.progress}%` }} /></div>
-            <small>다음 단계까지 {Math.max(0, s.next - profile.points)}점</small>
-          </>}
-        </div>
-        <div className="points">
-          {profileLoading ? <><b>…</b><span>점수 불러오는 중</span></> : <><b>{profile.points}</b><span>모은 점수</span></>}
-        </div>
-      </section>
-      
-      {loadError && <p className="game-load-error" role="alert">{loadError}</p>}
-      
-      <section className="game-grid" aria-label="게임 선택">
-        {(Object.keys(gameMeta) as GameId[]).map(id => 
-          <button className={'game-card ' + id} key={id} onClick={() => void startGame(id)}>
-            <span className="game-icon">{gameMeta[id].icon}</span>
-            <h2>{gameMeta[id].title}</h2>
-            <p>{gameMeta[id].description}</p>
-            <footer>최고 점수 <b>{profile.records[id].bestScore}</b> · 가장 많이 연속으로 맞힌 횟수 <b>{profile.records[id].bestCombo}</b></footer>
-            <div className="hall-of-fame" aria-label={`${gameMeta[id].title} 명예의 전당`}>
-              <h3>🏆 명예의 전당 (상위 세 명)</h3>
-              {rankings[id].length ? <ol className="ranking-list">
-                {rankings[id].map((entry, index) => 
-                  <li key={`${entry.id}-${index}`}>
-                    <span className="ranking-medal">{medals[index]}</span>
-                    <span className="ranking-id">{entry.name}</span>
-                    <span className="ranking-score">{entry.score}점</span>
-                  </li>
-                )}
-              </ol> : <p className="ranking-empty">아직 기록이 없습니다</p>}
+          <section className="profile-card" aria-label="내 정보" aria-busy={profileLoading}>
+            <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px' }}>
+              <button onClick={() => updateProfileFromSheet(accountId, profile)} disabled={profileLoading}
+                style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#e6fcf5', color: '#0ca678', border: '1px solid #63e6be', borderRadius: '20px', cursor: profileLoading ? 'wait' : 'pointer', transition: 'all 0.2s' }}
+                onMouseOver={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#c3fae8')}
+                onMouseOut={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#e6fcf5')}>
+                {profileLoading ? '가져오는 중...' : '새로고침 🔄'}
+              </button>
+              <button onClick={logout} 
+                style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#f1f3f5', color: '#495057', border: '1px solid #ced4da', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f1f3f5'}>
+                로그아웃 👋
+              </button>
             </div>
-          </button>
-        )}
-      </section>
+            
+            <div className="avatar">🏡</div>
+            <div className="profile-copy">
+              <p className="profile-name"><span>내 이름</span><strong>{profile.nickname || studentName || accountId}</strong></p>
+              {profileLoading ? <p className="profile-loading" role="status">점수 불러오는 중...</p> : <>
+                <h2>단계 {profile.level} · {profile.title}</h2>
+                <div className="progress"><i style={{ width: `${s.progress}%` }} /></div>
+                <small>다음 단계까지 {Math.max(0, s.next - profile.points)}점</small>
+              </>}
+            </div>
+            <div className="points">
+              {profileLoading ? <><b>…</b><span>점수 불러오는 중</span></> : <><b>{profile.points}</b><span>모은 점수</span></>}
+            </div>
+          </section>
+          
+          {loadError && <p className="game-load-error" role="alert">{loadError}</p>}
+          
+          <section className="game-grid" aria-label="게임 선택">
+            {(Object.keys(gameMeta) as GameId[]).map(id => 
+              <button className={'game-card ' + id} key={id} onClick={() => void startGame(id)}>
+                <span className="game-icon">{gameMeta[id].icon}</span>
+                <h2>{gameMeta[id].title}</h2>
+                <p>{gameMeta[id].description}</p>
+                <footer>최고 점수 <b>{profile.records[id].bestScore}</b> · 가장 많이 연속으로 맞힌 횟수 <b>{profile.records[id].bestCombo}</b></footer>
+                <div className="hall-of-fame" aria-label={`${gameMeta[id].title} 이번 주 명예의 전당`}>
+                  <h3>🔥 이번 주 명예의 전당</h3>
+                  {rankings[id].length ? <ol className="ranking-list">
+                    {rankings[id].map((entry, index) => 
+                      <li key={`cw-${entry.id}-${index}`}>
+                        <span className="ranking-medal">{medals[index]}</span>
+                        <span className="ranking-id">{entry.name}</span>
+                        <span className="ranking-score">{entry.score}점</span>
+                      </li>
+                    )}
+                  </ol> : <p className="ranking-empty">아직 기록이 없습니다</p>}
+                </div>
+              </button>
+            )}
+          </section>
+        </div>
+
+        {/* === [오른쪽 영역: 지난주 명예의 전당 게시판] === */}
+        <aside style={{ flex: '1 1 300px', maxWidth: '380px', backgroundColor: 'rgba(255, 255, 255, 0.95)', borderRadius: '24px', padding: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.06)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '1.4rem', color: '#495057', margin: 0 }}>🏆 지난주 명예의 전당</h2>
+            <p style={{ fontSize: '0.85rem', color: '#868e96', marginTop: '6px' }}>매주 월요일 오전 8시 랭킹 초기화</p>
+          </div>
+          
+          {(Object.keys(gameMeta) as GameId[]).map(id => (
+            <div key={`lastweek-${id}`} style={{ marginBottom: '20px', backgroundColor: '#f8f9fa', borderRadius: '16px', padding: '16px', border: '1px solid #f1f3f5' }}>
+              <h3 style={{ fontSize: '1.05rem', color: '#343a40', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{gameMeta[id].icon}</span> {gameMeta[id].title}
+              </h3>
+              {lastWeekRankings[id].length ? (
+                <ol style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {lastWeekRankings[id].map((entry, index) => (
+                    <li key={`lw-${entry.id}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.95rem' }}>
+                      <div>
+                        <span style={{ marginRight: '8px', fontSize: '1.1rem' }}>{medals[index]}</span>
+                        <strong style={{ color: '#495057' }}>{entry.name}</strong>
+                      </div>
+                      <span style={{ color: '#868e96', fontWeight: 'bold' }}>{entry.score}점</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p style={{ fontSize: '0.9rem', color: '#adb5bd', margin: 0, textAlign: 'center', padding: '10px 0' }}>지난주 기록이 없습니다</p>
+              )}
+            </div>
+          ))}
+        </aside>
+      </div>
     </main>
   )
 }

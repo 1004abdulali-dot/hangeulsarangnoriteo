@@ -187,9 +187,22 @@ def load_profile(login_id: str):
         'spy': {'bestScore': score_value('game2Best'), 'bestCombo': 0},
         'sort': {'bestScore': score_value('game3Best'), 'bestCombo': 0},
     }
+    
     rankings = data.get('rankings', source.get('rankings', {})) if isinstance(data, dict) else {}
     rankings = rankings if isinstance(rankings, dict) else {}
-    return {'login_id': student_id, 'school': school, 'points': points, 'records': records, 'rankings': rankings}
+    
+    # 🚀 추가된 부분: 구글 시트에서 지난주 랭킹도 챙겨서 화면으로 보냅니다!
+    last_week = data.get('lastWeekRankings', source.get('lastWeekRankings', {})) if isinstance(data, dict) else {}
+    last_week = last_week if isinstance(last_week, dict) else {}
+    
+    return {
+        'login_id': student_id, 
+        'school': school, 
+        'points': points, 
+        'records': records, 
+        'rankings': rankings,
+        'lastWeekRankings': last_week
+    }
 
 @app.put('/api/profile')
 def save_profile(payload: ProfilePayload):
