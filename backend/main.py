@@ -229,11 +229,15 @@ def teacher_students():
     sheet_students = data.get('students', [])
     
     def get_status(points):
-        if points >= 40000: return 6, "우리말 별빛 대장"
-        if points >= 25000: return 5, "한글 마을 수호자"
-        if points >= 15000: return 4, "세종대왕의 오른팔"
-        if points >= 8000:  return 3, "우리말 지킴이"
-        if points >= 3000:  return 2, "초보 훈민정음"
+        if points >= 300000: return 10, "전설의 훈민정음 마스터"
+        if points >= 200000: return 9, "위대한 한글 영웅"
+        if points >= 130000: return 8, "우리말 수호신"
+        if points >= 70000:  return 7, "집현전 최고 학자"
+        if points >= 40000:  return 6, "우리말 별빛 대장"
+        if points >= 25000:  return 5, "한글 마을 수호자"
+        if points >= 15000:  return 4, "세종대왕의 오른팔"
+        if points >= 8000:   return 3, "우리말 지킴이"
+        if points >= 3000:   return 2, "초보 훈민정음"
         return 1, "한글 새싹"
 
     result = []

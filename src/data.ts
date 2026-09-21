@@ -4,8 +4,17 @@ export type Records = Record<GameId, Record>
 export type Profile = { nickname: string; points: number; level: number; title: string; records: Records }
 export const initialRecords: Records = { rain: { bestScore: 0, bestCombo: 0 }, spy: { bestScore: 0, bestCombo: 0 }, sort: { bestScore: 0, bestCombo: 0 } }
 export const levels = [
-  { at: 0, title: '한글 새싹' }, { at: 3000, title: '초보 훈민정음' }, { at: 8000, title: '우리말 지킴이' },
-  { at: 15000, title: '세종대왕의 오른팔' }, { at: 25000, title: '한글 마을 수호자' }, { at: 40000, title: '우리말 별빛 대장' }
+  { at: 0, title: '한글 새싹' }, 
+  { at: 3000, title: '초보 훈민정음' }, 
+  { at: 8000, title: '우리말 지킴이' },
+  { at: 15000, title: '세종대왕의 오른팔' }, 
+  { at: 25000, title: '한글 마을 수호자' }, 
+  { at: 40000, title: '우리말 별빛 대장' },
+  // 👇 여기서부터 새롭게 추가된 신의 경지(7~10단계)입니다! 칭호는 마음껏 수정하세요!
+  { at: 70000, title: '집현전 최고 학자' },
+  { at: 130000, title: '우리말 수호신' },
+  { at: 200000, title: '위대한 한글 영웅' },
+  { at: 300000, title: '전설의 훈민정음 마스터' }
 ]
 export function status(points: number) {
   let level = 1; let title = levels[0].title; let next = levels[1].at
