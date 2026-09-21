@@ -46,7 +46,7 @@ export default function App() {
   const [profileLoading, setProfileLoading] = useState(false)
   const [rankings, setRankings] = useState<Rankings>(emptyRankings)
 
- const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
+  const updateProfileFromSheet = useCallback(async (loginId: string, fallback: Profile) => {
     const studentId = typeof loginId === 'string' ? loginId.trim() : ''
     if (!studentId) return
     setProfileLoading(true)
@@ -65,7 +65,6 @@ export default function App() {
       
       const current = status(points)
       
-      // ✅ 시트에서 가져온 학교 이름이 있으면 "학교명 + 이름"으로 합쳐줍니다!
       const schoolName = data.school ? String(data.school).trim() : ''
       const displayNickname = schoolName ? `${schoolName} ${studentId}` : studentId
 
@@ -89,7 +88,6 @@ export default function App() {
     const user = data.user && typeof data.user === 'object' ? data.user : data
     let baseProfile: Profile
     
-    // 🚀 로그인 즉시 백엔드에서 날아온 학교 정보를 내 이름표에 찰싹 붙여줍니다!
     const schoolName = user.school ? String(user.school).trim() : ''
     const currentId = user.login_id || user.id || loginId
     const displayNickname = schoolName ? `${schoolName} ${currentId}` : currentId
@@ -115,7 +113,6 @@ export default function App() {
     setTeacherLoggedIn(true)
   }
 
-  // ✅ 로그아웃 함수 추가: 모든 정보(상태)를 초기화하고 로그인 화면으로 돌아갑니다.
   const logout = () => {
     if (window.confirm('정말 로그아웃 할까요?')) {
       setProfile(emptyProfile)
@@ -242,15 +239,28 @@ export default function App() {
       </header>
       
       <section className="profile-card" aria-label="내 정보" aria-busy={profileLoading}>
-        {/* ✅ 로그아웃 버튼을 프로필 카드 우측 상단에 배치 */}
-        <button 
-          onClick={logout} 
-          style={{ position: 'absolute', top: '15px', right: '15px', padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#f1f3f5', color: '#495057', border: '1px solid #ced4da', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f1f3f5'}
-        >
-          로그아웃 👋
-        </button>
+        
+        {/* ✅ 새로고침 버튼과 로그아웃 버튼을 한데 묶어서 우측 상단에 예쁘게 배치! */}
+        <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={() => updateProfileFromSheet(accountId, profile)} 
+            disabled={profileLoading}
+            style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#e6fcf5', color: '#0ca678', border: '1px solid #63e6be', borderRadius: '20px', cursor: profileLoading ? 'wait' : 'pointer', transition: 'all 0.2s' }}
+            onMouseOver={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#c3fae8')}
+            onMouseOut={(e) => !profileLoading && (e.currentTarget.style.backgroundColor = '#e6fcf5')}
+          >
+            {profileLoading ? '가져오는 중...' : '새로고침 🔄'}
+          </button>
+          
+          <button 
+            onClick={logout} 
+            style={{ padding: '6px 12px', fontSize: '0.85rem', backgroundColor: '#f1f3f5', color: '#495057', border: '1px solid #ced4da', borderRadius: '20px', cursor: 'pointer', transition: 'all 0.2s' }}
+            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#e9ecef'}
+            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#f1f3f5'}
+          >
+            로그아웃 👋
+          </button>
+        </div>
         
         <div className="avatar">🏡</div>
         <div className="profile-copy">
